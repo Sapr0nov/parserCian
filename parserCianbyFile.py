@@ -1,31 +1,31 @@
 # -*- coding: utf-8 -*-
 import requests
 from bs4 import BeautifulSoup
-from urllib.request import urlopen
-import csv
 import os
-import base64
 import re 
-import math
-import configparser
+import csv
 import sys
+import configparser
+from cefpython3 import cefpython as cef
 
 flats = []
+COOKIES = ''
+
 config = configparser.ConfigParser()
-config_file = config.read('config.ini')
 
 if os.path.isfile('config.ini') == False: 
     print('установка значений по умолчанию')
-    COOKIES = input('Введите COOKIES и нажмите Enter для продолжения')
+    COOKIEinput = input('Введите COOKIES и нажмите Enter для продолжения')
     config['DEFAULT'] = {
-        'COOKIES': COOKIES,
+        'COOKIES': COOKIEinput,
         'FILE': 'output.csv',
-        'LINKS_FILE': 'links-list.csv',
+        'LINKS_FILE': 'links-list',
         'HOST': '',
         }
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
-    config_file = config.read('config.ini')
+
+config_file = config.read('config.ini')
 
 HEADERS = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.146 Safari/537.36',
@@ -64,6 +64,7 @@ def get_content(html, link):
         'Построен': 'year',
         'Срок сдачи': 'year_pass',
         'Строительная Серия': 'homeSeries',
+        'Строительная серия': 'homeSeries',
         'Тип перекрытий': 'perekritiya',
         'Лифты': 'lift',
         'Подъезды':'podezdi',
@@ -87,7 +88,7 @@ def get_content(html, link):
         'Кухня':'kitchen',
         'Этаж':'floor',
     }
-    #Строительная сериия   
+     
     params = {
         'flatId' : '',
         'address' : '',
@@ -295,7 +296,7 @@ def parse():
     LINKS_FILE = LINKS_FILE.strip();
     print('open: ',LINKS_FILE)
 
-    if os.path.isfile('config.ini'): 
+    if os.path.isfile(LINKS_FILE): 
         with open(LINKS_FILE, encoding='cp1251') as r_file:
             file_reader = csv.reader(r_file, delimiter = ";")
             cnt = 0
@@ -305,6 +306,7 @@ def parse():
         
             print (f'Найдено {cnt} записей')
     else:
+        input(f"Файл не найден. Нажмите Enter для завершения программы.")
         sys.exit("Файл не найден. Работа программы прекращена.")
 
     with open(LINKS_FILE, encoding='cp1251') as r_file:
@@ -317,7 +319,11 @@ def parse():
             if count == 1:
                 print(f'Найден столбец - {", ".join(row)}')
                 continue
-            
+
+            # автосохранение каждые 100 записей
+            if count % 100 == 0:  
+                save_file(flats, 'list-tmp.csv')
+
             print(f'{row[0]} {count} / {cnt}')
             URL = row[0]
             # запускаем цикл парсинга на каждую страницу пагинации
@@ -326,15 +332,9 @@ def parse():
                 html = get_html(URL)
                 addInfo = get_content(html.text,URL)
                 if addInfo == 'captcha':
-                    COOKIES = input('Введите COOKIES и нажмите Enter для продолжения')
-                    config['DEFAULT']['COOKIES'] = COOKIES
-                    with open('config.ini', 'w') as configfile:
-                        config.write(configfile)
-                    HEADERS['cookie'] = COOKIES;
-                    if COOKIES == '':
-                        save_file(flats, FILE)
-                        os.startfile(FILE)
-                        break
+                    captcha()
+                    config_file = config.read('config.ini')
+                    HEADERS['cookie'] = config['DEFAULT']['COOKIES'];
                 else:
                     successful = True
             else:
@@ -347,7 +347,51 @@ def parse():
         print(f'Всего Обработано {count} строк.')
         save_file(flats, config['DEFAULT']['FILE'])
         os.startfile(config['DEFAULT']['FILE'])
-#//parse
+        cef.Shutdown()
+    #//parse
+
+def captcha():
+    check_versions()
+    #sys.excepthook = cef.ExceptHook  # To shutdown all CEF processes on error
+    cef.Initialize()
+    browser = cef.CreateBrowserSync(url="https://cian.ru/", window_title="Капча!")
+    browser.SetClientHandler(LoadHandler())
+    cef.MessageLoop()
+    return True
+
+class LoadHandler(object):
+    def OnLoadingStateChange(self, browser, is_loading, **_):
+        if is_loading:
+            manager = cef.CookieManager.GetGlobalManager()
+            self.cookie_visitor = CookieVisitor()
+            result = manager.VisitAllCookies(self.cookie_visitor)
+            if not result:
+                print("Error: could not access cookies")
+            else:
+                while self.cookie_visitor.show_cookie() == '':
+                    self.cookie_visitor.show_cookie()
+                COOKIES = self.cookie_visitor.show_cookie()
+                if COOKIES.find('anti_bot') > 0:
+                    COOKIES = COOKIES.replace('%', '%%')
+                    config['DEFAULT']['COOKIES'] = COOKIES
+                    with open('config.ini', 'w') as configfile:
+                        config.write(configfile)
+                    browser.CloseBrowser(True)
+                    return True        
+
+class CookieVisitor(object):
+    cookie_str = ''    
+    def Visit(self, cookie, count, total, delete_cookie_out):
+        self.cookie_str +=  cookie.GetName() + '=' + cookie.GetValue() + '; '
+        return True
+
+    def show_cookie(self):
+        return self.cookie_str
+
+def check_versions():
+    ver = cef.GetVersion()
+    assert cef.__version__ >= "57.0", "CEF Python v57.0+ required to run this"
+
 
 # starting programm
 

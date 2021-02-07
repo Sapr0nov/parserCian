@@ -20,7 +20,7 @@ if os.path.isfile('config.ini') == False:
     config['DEFAULT'] = {
         'COOKIES': COOKIES,
         'FILE': 'output.csv',
-        'LINKS_FILE': 'links-list.csv',
+        'LINKS_FILE': 'links-list',
         'HOST': '',
         }
     with open('config.ini', 'w') as configfile:
