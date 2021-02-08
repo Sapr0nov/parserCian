@@ -1,31 +1,31 @@
 # -*- coding: utf-8 -*-
 import requests
 from bs4 import BeautifulSoup
+from cefpython3 import cefpython as cef
 import os
 import re 
 import csv
 import sys
 import configparser
-from cefpython3 import cefpython as cef
 
 flats = []
-COOKIES = ''
-
 config = configparser.ConfigParser()
 
-if os.path.isfile('config.ini') == False: 
+if os.path.isfile('cian_config.ini') == False: 
     print('установка значений по умолчанию')
     COOKIEinput = input('Введите COOKIES и нажмите Enter для продолжения')
     config['DEFAULT'] = {
         'COOKIES': COOKIEinput,
-        'FILE': 'output.csv',
+        'FILE': 'output',
         'LINKS_FILE': 'links-list',
         'HOST': '',
+        'PRICES': '',
+        'URL': 'https://nn.cian.ru/cat.php?deal_type=sale&engine_version=2&offer_type=flat&region=4885',
         }
-    with open('config.ini', 'w') as configfile:
+    with open('cian_config.ini', 'w') as configfile:
         config.write(configfile)
 
-config_file = config.read('config.ini')
+config_file = config.read('cian_config.ini')
 
 HEADERS = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.146 Safari/537.36',
@@ -289,7 +289,7 @@ def parse():
     LINKS_FILE = input(f"Введите названия CSV файла ({ config['DEFAULT']['LINKS_FILE'] }): ")
 
     if LINKS_FILE == '':
-        LINKS_FILE = config['DEFAULT']['LINKS_FILE'] 
+        LINKS_FILE = config['DEFAULT']['LINKS_FILE']
 
     LINKS_FILE += '.csv'
     
@@ -332,8 +332,8 @@ def parse():
                 html = get_html(URL)
                 addInfo = get_content(html.text,URL)
                 if addInfo == 'captcha':
-                    captcha()
-                    config_file = config.read('config.ini')
+                    captcha(URL)
+                    config_file = config.read('cian_config.ini')
                     HEADERS['cookie'] = config['DEFAULT']['COOKIES'];
                 else:
                     successful = True
@@ -345,16 +345,16 @@ def parse():
             flats.extend(addInfo)
                
         print(f'Всего Обработано {count} строк.')
-        save_file(flats, config['DEFAULT']['FILE'])
-        os.startfile(config['DEFAULT']['FILE'])
+        save_file(flats, config['DEFAULT']['FILE']+'.csv')
+        os.startfile(config['DEFAULT']['FILE']+'.csv')
         cef.Shutdown()
     #//parse
 
-def captcha():
+def captcha(URL):
     check_versions()
     #sys.excepthook = cef.ExceptHook  # To shutdown all CEF processes on error
     cef.Initialize()
-    browser = cef.CreateBrowserSync(url="https://cian.ru/", window_title="Капча!")
+    browser = cef.CreateBrowserSync(url=URL, window_title="Капча!")
     browser.SetClientHandler(LoadHandler())
     cef.MessageLoop()
     return True
@@ -374,7 +374,7 @@ class LoadHandler(object):
                 if COOKIES.find('anti_bot') > 0:
                     COOKIES = COOKIES.replace('%', '%%')
                     config['DEFAULT']['COOKIES'] = COOKIES
-                    with open('config.ini', 'w') as configfile:
+                    with open('cian_config.ini', 'w') as configfile:
                         config.write(configfile)
                     browser.CloseBrowser(True)
                     return True        
